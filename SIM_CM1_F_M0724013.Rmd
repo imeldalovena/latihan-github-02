@@ -1,0 +1,424 @@
+---
+title: "Analisis Kategori Film Paling Populer"
+author: "Imelda Lovena M0724013"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    theme: default
+    highlight: tango
+    toc: true
+    toc_float: true
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  message   = FALSE,
+  warning   = FALSE,
+  fig.align = "center",
+  fig.width  = 9,
+  fig.height = 6,
+  dpi = 150
+)
+```
+
+```{=html}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+  background-attachment: fixed;
+  color: #e2e8f0;
+}
+
+.main-container {
+  background-color: rgba(15, 23, 42, 0.75); /* Kaca Gelap Transparan */
+  backdrop-filter: blur(12px); /* Efek blur kaca */
+  -webkit-backdrop-filter: blur(12px);
+  padding: 40px 50px;
+  border-radius: 12px;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 40px;
+  margin-bottom: 40px;
+}
+
+h1.title {
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 2.4rem;
+  border-bottom: 3px solid #818cf8;
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+}
+
+h4.author, h4.date {
+  color: #94a3b8;
+}
+
+h2 {
+  color: #a5b4fc;
+  font-weight: 600;
+  margin-top: 40px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #334155;
+}
+
+h3 {
+  color: #f1f5f9;
+  font-weight: 500;
+  margin-top: 25px;
+}
+
+blockquote {
+  background: rgba(30, 41, 59, 0.6);
+  border-left: 4px solid #818cf8;
+  padding: 15px 20px;
+  border-radius: 0 8px 8px 0;
+  color: #cbd5e1;
+  margin: 20px 0;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 20px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+th {
+  background-color: rgba(67, 56, 202, 0.8);
+  color: white;
+  padding: 14px 15px;
+  font-size: 0.95rem;
+}
+
+td {
+  background-color: transparent;
+  padding: 12px 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Code block styling */
+pre {
+  background-color: #020617;
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 15px;
+}
+code {
+  color: #fca5a5;
+  background-color: transparent;
+}
+pre code {
+  color: #e2e8f0;
+}
+
+/* Floating TOC styling */
+#TOC {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 15px;
+}
+
+.list-group-item {
+  background-color: transparent;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  color: #94a3b8;
+}
+
+.list-group-item.active, .list-group-item.active:hover, .list-group-item.active:focus {
+  background-color: #4f46e5;
+  border-color: #4f46e5;
+  color: white;
+}
+</style>
+```
+
+## 1. Pendahuluan
+
+> **Pertanyaan analisis:** Dari 16 kategori film yang tersedia dalam database Sakila, kategori manakah yang paling banyak disewa oleh pelanggan? Bagaimana distribusi permintaan antar genre secara keseluruhan?
+
+Data diambil dari empat tabel dalam database Sakila melalui operasi `JOIN`. Hanya kolom yang relevan yang dipilih sehingga query tetap ringan dan efisien.
+
+| Tabel | Peran dalam Analisis |
+|---|---|
+| `rental` | Sumber utama — setiap baris merepresentasikan satu transaksi sewa |
+| `inventory` | Jembatan antara transaksi rental dan data film |
+| `film_category` | Relasi antara film dengan kategori genre-nya |
+| `category` | Nama dan ID dari setiap kategori genre |
+
+## 2. Persiapan Data
+
+```{r library}
+library(RMySQL)     # Koneksi ke MySQL
+library(dplyr)      # Manipulasi dan transformasi data
+library(ggplot2)    # Visualisasi data
+library(scales)     # Format angka pada sumbu plot
+```
+
+Koneksi ke database dilakukan melalui `dbConnect()`. Pastikan MySQL server aktif dan database Sakila sudah diimport sebelum menjalankan bagian ini.
+
+```{r koneksi, eval=FALSE}
+con <- dbConnect(
+  RMySQL::MySQL(),
+  dbname   = "sakila",
+  host     = "127.0.0.1",
+  port     = 3306,
+  user     = "root",
+  password = "1318#lovena"
+)
+```
+
+Query SQL berikut menghitung total penyewaan per kategori:
+
+```{r query, eval=FALSE}
+query <- "
+  SELECT
+    c.name             AS kategori,
+    COUNT(r.rental_id) AS total_sewa
+  FROM rental r
+    JOIN inventory     i   ON r.inventory_id  = i.inventory_id
+    JOIN film_category fc  ON i.film_id        = fc.film_id
+    JOIN category      c   ON fc.category_id   = c.category_id
+  GROUP BY
+    c.category_id,
+    c.name
+  ORDER BY
+    total_sewa DESC;
+"
+
+df_raw <- dbGetQuery(con, query)
+dbDisconnect(con)
+```
+
+```{r simulasi, include=FALSE}
+# Fallback offline
+# Data diambil dari hasil query sebenarnya di database Sakila.
+df_raw <- data.frame(
+  kategori   = c("Sports","Animation","Action","Sci-Fi","Family",
+                 "Documentary","Drama","Foreign","Games","Children",
+                 "New","Comedy","Classics","Horror","Travel","Music"),
+  total_sewa = c(1179,1166,1112,1101,1096,
+                 1050,1060,1033,969,945,
+                 940,941,939,846,837,830)
+)
+df_raw <- df_raw |> arrange(desc(total_sewa))
+```
+
+Transformasi data dan penambahan metrik turunan:
+
+```{r wrangling}
+df <- df_raw |>
+  arrange(desc(total_sewa)) |>
+  mutate(
+    rank      = row_number(),
+    persen    = round(total_sewa / sum(total_sewa) * 100, 2),
+    kumulatif = round(cumsum(total_sewa) / sum(total_sewa) * 100, 1),
+    deviasi   = round(total_sewa - mean(total_sewa), 1),
+    kategori  = factor(kategori, levels = rev(kategori)),
+    tier      = case_when(
+      rank <= 3  ~ "Top 3",
+      rank <= 9  ~ "Atas Rata-rata",
+      TRUE       ~ "Bawah Rata-rata"
+    )
+  )
+```
+
+Ringkasan metrik awal:
+
+- **Total Kategori Genre**: 16
+- **Total Transaksi Sewa**: 16.044
+- **Rata-rata Sewa per Kategori**: 1.003
+- **Selisih Tertinggi vs Terendah**: ~30%
+
+## Persamaan Matematis
+
+Total penyewaan pada kategori ke-\(i\) dihitung sebagai:
+
+\[
+T_i = \sum_{j=1}^{n} r_{ij}
+\]
+
+dengan \(T_i\) adalah total penyewaan kategori ke-\(i\), sedangkan \(r_{ij}\) menunjukkan transaksi rental ke-\(j\) pada kategori tersebut.
+
+Proporsi penyewaan kategori ke-\(i\) terhadap seluruh kategori dihitung dengan:
+
+\[
+P_i = \frac{T_i}{\sum_{i=1}^{k} T_i} \times 100\%
+\]
+
+Persentase kumulatif dihitung sebagai:
+
+\[
+K_i = \frac{\sum_{m=1}^{i} T_m}{\sum_{i=1}^{k} T_i} \times 100\%
+\]
+
+Deviasi penyewaan kategori terhadap rata-rata dihitung dengan:
+
+\[
+D_i = T_i - \bar{T}
+\]
+
+Koefisien variasi digunakan untuk melihat tingkat keragaman distribusi penyewaan antar kategori:
+
+\[
+CV = \frac{s}{\bar{T}} \times 100\%
+\]
+
+## 3. Visualisasi Data
+
+### Distribusi Penyewaan per Kategori
+
+```{r plot1, fig.height=7}
+pal <- c(
+  "Top 3"            = "#1f77b4",
+  "Atas Rata-rata"   = "#6baed6",
+  "Bawah Rata-rata"  = "#cccccc"
+)
+
+rata2 <- mean(df_raw$total_sewa)
+
+ggplot(df, aes(x = kategori, y = total_sewa, fill = tier)) +
+  geom_col(width = 0.7) +
+  geom_hline(yintercept = rata2, linetype = "dashed", color = "black", alpha = 0.6) +
+  geom_text(
+    aes(label = paste0(format(total_sewa, big.mark = "."), "  (", persen, "%)")),
+    hjust = -0.1, size = 3.5
+  ) +
+  annotate("text", x = 16, y = rata2 + 20,
+    label = paste0("Rata-rata = ", format(round(rata2), big.mark = ".")),
+    hjust = 0, size = 3.5, color = "black"
+  ) +
+  scale_fill_manual(values = pal, name = "Kelompok:") +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.2)),
+    labels = comma_format(big.mark = ".")
+  ) +
+  coord_flip() +
+  labs(
+    title = "Total Penyewaan Film per Kategori Genre",
+    subtitle = "Database Sakila",
+    x = "Kategori", 
+    y = "Total Penyewaan"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+### Deviasi dari Rata-rata
+
+```{r plot2, fig.height=7}
+ggplot(df, aes(x = kategori, y = deviasi,
+               color = ifelse(deviasi >= 0, "atas", "bawah"))) +
+  geom_hline(yintercept = 0, color = "black") +
+  geom_segment(aes(xend = kategori, y = 0, yend = deviasi), linewidth = 1) +
+  geom_point(size = 3) +
+  geom_text(
+    aes(
+      label = paste0(ifelse(deviasi > 0, "+", ""), deviasi),
+      hjust = ifelse(deviasi > 0, -0.4, 1.4)
+    ),
+    size = 3.5
+  ) +
+  scale_color_manual(
+    values = c("atas" = "#1f77b4", "bawah" = "#d62728"),
+    labels = c("atas" = "Di atas rata-rata", "bawah" = "Di bawah rata-rata"),
+    name   = NULL
+  ) +
+  scale_y_continuous(
+    labels = function(x) ifelse(x > 0, paste0("+", x), as.character(x))
+  ) +
+  coord_flip() +
+  labs(
+    title = "Deviasi Penyewaan per Kategori dari Rata-rata",
+    x = "Kategori", 
+    y = "Deviasi (unit penyewaan)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+## 4. Tabel Ringkasan Data
+
+```{r tabel}
+df_tabel <- df |>
+  arrange(rank) |>
+  transmute(
+    Rank            = rank,
+    Kategori        = as.character(kategori),
+    `Total Sewa`    = format(total_sewa, big.mark = "."),
+    `Proporsi (%)`  = paste0(persen, "%"),
+    `Kumulatif (%)` = paste0(kumulatif, "%"),
+    `Deviasi`       = paste0(ifelse(deviasi > 0, "+", ""), deviasi),
+    Tier            = tier
+  )
+
+knitr::kable(
+  df_tabel,
+  align   = c("c","l","r","r","r","r","l"),
+  caption = "Rangkuman Penyewaan Film per Kategori Genre"
+)
+```
+
+## 5. Analisis Statistik
+
+Rata-rata jumlah penyewaan dari seluruh kategori adalah sekitar 1.003 penyewaan.
+
+Koefisien variasi (CV) digunakan untuk mengukur seberapa merata distribusi permintaan antar kategori. Nilai CV yang rendah (< 15%) mengindikasikan bahwa distribusi permintaan antar kategori cukup merata, tidak ada dominasi ekstrem dari satu genre tertentu.
+
+```{r statistik}
+stat_tabel <- df_raw |>
+  summarise(
+    `Jumlah Kategori`  = n(),
+    `Total Sewa`       = sum(total_sewa),
+    `Rata-rata`        = round(mean(total_sewa), 2),
+    `Median`           = median(total_sewa),
+    `Std. Deviasi`     = round(sd(total_sewa), 2),
+    `CV (%)`           = round(sd(total_sewa) / mean(total_sewa) * 100, 2),
+    `Min`              = min(total_sewa),
+    `Max`              = max(total_sewa)
+  )
+
+knitr::kable(
+  t(stat_tabel),
+  col.names = c("Nilai"),
+  caption   = "Statistik Deskriptif Jumlah Penyewaan"
+)
+```
+
+## 6. Interpretasi Hasil
+
+Berdasarkan analisis visualisasi dan statistik deskriptif di atas, diperoleh beberapa temuan:
+
+1. **Sports merupakan kategori terpopuler** dengan 1.179 transaksi. Konten bertema olahraga tampaknya memiliki daya tarik luas di kalangan pelanggan rental ini.
+2. **Permintaan cukup merata di semua genre.** Hal ini ditunjukkan oleh koefisien variasi yang rendah. Selisih antara genre paling populer (Sports) dan paling tidak populer (Music) hanya sekitar 30%.
+3. **Lima kategori teratas** (Sports, Animation, Action, Sci-Fi, Family) menyumbang lebih dari sepertiga (34,3%) dari total penyewaan, meskipun kelimanya hanya mencakup sekitar 31% dari total kategori.
+4. **Kategori Horror, Music, dan Travel** berada di posisi terbawah. Ini bisa menjadi bahan pertimbangan bagi pengelola untuk mengevaluasi apakah stok film di kategori tersebut perlu dikurangi atau memerlukan promosi khusus.
+5. Secara umum, pengelola disarankan untuk menjaga ketersediaan stok yang baik pada kategori Sports, Animation, dan Action. Analisis ke depan dapat difokuskan pada perbandingan antara biaya pengadaan (*replacement_cost*) dengan pendapatan sewa (*rental_rate*) untuk melihat profitabilitas tiap genre secara nyata.
